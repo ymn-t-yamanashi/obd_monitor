@@ -59,21 +59,18 @@ defmodule ObdMonitor.Telemetry do
 
   @impl true
   def handle_info(:connect, state) do
-    case UART.start_link() do
-      {:ok, uart} ->
-        case UART.open(uart, state.device, speed: @default_speed, active: false) do
-          :ok ->
-            configured = initialize_adapter(uart)
-            Process.send_after(self(), :poll, 50)
-            {:noreply, %{state | uart: uart, status: configured}}
+    with {:ok, uart} <- tagged_uart_start(),
+         :ok <- tagged_uart_open(uart, state.device) do
+      configured = initialize_adapter(uart)
+      Process.send_after(self(), :poll, 50)
+      {:noreply, %{state | uart: uart, status: configured}}
+    else
+      {:error, {:open_failed, reason}} ->
+        Logger.error("Failed to open #{state.device}: #{inspect(reason)}")
+        schedule_reconnect()
+        {:noreply, error_state(state, "open failed: #{inspect(reason)}")}
 
-          {:error, reason} ->
-            Logger.error("Failed to open #{state.device}: #{inspect(reason)}")
-            schedule_reconnect()
-            {:noreply, error_state(state, "open failed: #{inspect(reason)}")}
-        end
-
-      {:error, reason} ->
+      {:error, {:uart_start_failed, reason}} ->
         Logger.error("Failed to start UART: #{inspect(reason)}")
         schedule_reconnect()
         {:noreply, error_state(state, "uart start failed: #{inspect(reason)}")}
@@ -95,10 +92,7 @@ defmodule ObdMonitor.Telemetry do
     {battery, battery_err} = read_battery_voltage(state.uart)
 
     {status, last_error} =
-      case {rpm_err, coolant_err, ignition_err, intake_err, battery_err} do
-        {nil, nil, nil, nil, nil} -> {"connected", nil}
-        _ -> {"degraded", Enum.find([rpm_err, coolant_err, ignition_err, intake_err, battery_err], & &1)}
-      end
+      telemetry_health(rpm_err, coolant_err, ignition_err, intake_err, battery_err)
 
     elapsed_ms = System.monotonic_time(:millisecond) - started_at
     next_poll_ms = max(state.interval_ms - elapsed_ms, 0)
@@ -119,22 +113,44 @@ defmodule ObdMonitor.Telemetry do
 
   def handle_info(_msg, state), do: {:noreply, state}
 
+  defp tagged_uart_start do
+    with {:ok, uart} <- UART.start_link() do
+      {:ok, uart}
+    else
+      {:error, reason} -> {:error, {:uart_start_failed, reason}}
+    end
+  end
+
+  defp tagged_uart_open(uart, device) do
+    with :ok <- UART.open(uart, device, speed: @default_speed, active: false) do
+      :ok
+    else
+      {:error, reason} -> {:error, {:open_failed, reason}}
+    end
+  end
+
+  defp telemetry_health(nil, nil, nil, nil, nil), do: {"connected", nil}
+
+  defp telemetry_health(rpm_err, coolant_err, ignition_err, intake_err, battery_err) do
+    {"degraded", Enum.find([rpm_err, coolant_err, ignition_err, intake_err, battery_err], & &1)}
+  end
+
   defp initialize_adapter(uart) do
     # Keep protocol auto-detect while disabling noisy formatting.
-    case Enum.find(["ATZ", "ATE0", "ATL0", "ATS0", "ATH0", "ATSP0"], fn cmd ->
-           match?({:error, _}, send_cmd(uart, cmd))
-         end) do
-      nil ->
-        "connected"
-
-      failed_cmd ->
-        Logger.error("Adapter init failed on #{failed_cmd}")
-        "init failed"
-    end
+    ["ATZ", "ATE0", "ATL0", "ATS0", "ATH0", "ATSP0"]
+    |> Enum.find(fn cmd -> match?({:error, _}, send_cmd(uart, cmd)) end)
+    |> adapter_init_status()
   rescue
     error ->
       Logger.error("Adapter init crashed: #{Exception.message(error)}")
       "init failed"
+  end
+
+  defp adapter_init_status(nil), do: "connected"
+
+  defp adapter_init_status(failed_cmd) do
+    Logger.error("Adapter init failed on #{failed_cmd}")
+    "init failed"
   end
 
   defp read_rpm(uart) do
@@ -188,23 +204,25 @@ defmodule ObdMonitor.Telemetry do
   end
 
   defp collect_response(uart, acc) do
-    case UART.read(uart, @uart_read_timeout_ms) do
-      {:ok, data} ->
-        next = acc <> data
-
-        if String.contains?(next, ">") do
-          {:ok, next}
-        else
-          collect_response(uart, next)
-        end
-
-      {:error, :timeout} ->
-        {:error, "timeout"}
-
-      {:error, reason} ->
-        {:error, "uart error #{inspect(reason)}"}
-    end
+    uart
+    |> UART.read(@uart_read_timeout_ms)
+    |> handle_uart_read(uart, acc)
   end
+
+  defp handle_uart_read({:ok, data}, uart, acc), do: continue_or_done(uart, acc <> data)
+  defp handle_uart_read({:error, :timeout}, _uart, _acc), do: {:error, "timeout"}
+
+  defp handle_uart_read({:error, reason}, _uart, _acc),
+    do: {:error, "uart error #{inspect(reason)}"}
+
+  defp continue_or_done(uart, next) do
+    next
+    |> String.contains?(">")
+    |> collect_or_return(uart, next)
+  end
+
+  defp collect_or_return(true, _uart, next), do: {:ok, next}
+  defp collect_or_return(false, uart, next), do: collect_response(uart, next)
 
   defp extract_pid_bytes(raw, pid, byte_count) do
     clean =
@@ -216,17 +234,29 @@ defmodule ObdMonitor.Telemetry do
   end
 
   defp parse_pid(clean, pid, 2) do
-    case Regex.run(~r/41#{pid}([0-9A-F]{2})([0-9A-F]{2})/u, clean, capture: :all_but_first) do
-      [a_hex, b_hex] -> {:ok, String.to_integer(a_hex, 16), String.to_integer(b_hex, 16)}
-      _ -> {:error, "pid 01#{pid} parse failed (#{String.slice(clean, 0, 24)})"}
-    end
+    clean
+    |> Regex.run(~r/41#{pid}([0-9A-F]{2})([0-9A-F]{2})/u, capture: :all_but_first)
+    |> parse_two_byte_pid(clean, pid)
   end
 
   defp parse_pid(clean, pid, 1) do
-    case Regex.run(~r/41#{pid}([0-9A-F]{2})/u, clean, capture: :all_but_first) do
-      [a_hex] -> {:ok, String.to_integer(a_hex, 16)}
-      _ -> {:error, "pid 01#{pid} parse failed (#{String.slice(clean, 0, 24)})"}
-    end
+    clean
+    |> Regex.run(~r/41#{pid}([0-9A-F]{2})/u, capture: :all_but_first)
+    |> parse_one_byte_pid(clean, pid)
+  end
+
+  defp parse_two_byte_pid([a_hex, b_hex], _clean, _pid) do
+    {:ok, String.to_integer(a_hex, 16), String.to_integer(b_hex, 16)}
+  end
+
+  defp parse_two_byte_pid(_capture, clean, pid) do
+    {:error, "pid 01#{pid} parse failed (#{String.slice(clean, 0, 24)})"}
+  end
+
+  defp parse_one_byte_pid([a_hex], _clean, _pid), do: {:ok, String.to_integer(a_hex, 16)}
+
+  defp parse_one_byte_pid(_capture, clean, pid) do
+    {:error, "pid 01#{pid} parse failed (#{String.slice(clean, 0, 24)})"}
   end
 
   defp error_state(state, message) do

@@ -46,16 +46,11 @@ defmodule ObdMonitor.Dashboard do
     top_height = 3
     gauge_height = 4
 
-    rpm_text = if state.rpm, do: "#{state.rpm} rpm", else: "-- rpm"
-    temp_text = if state.coolant_temp_c, do: "#{state.coolant_temp_c} C", else: "-- C"
-
-    ignition_text =
-      if state.ignition_timing_deg, do: :erlang.float_to_binary(state.ignition_timing_deg, decimals: 1), else: "--"
-
-    intake_text = if state.intake_pressure_kpa, do: "#{state.intake_pressure_kpa} kPa", else: "-- kPa"
-
-    battery_text =
-      if state.battery_voltage_v, do: :erlang.float_to_binary(state.battery_voltage_v, decimals: 2), else: "--"
+    rpm_text = rpm_text(state.rpm)
+    temp_text = temp_text(state.coolant_temp_c)
+    ignition_text = ignition_text(state.ignition_timing_deg)
+    intake_text = intake_text(state.intake_pressure_kpa)
+    battery_text = battery_text(state.battery_voltage_v)
 
     status_panel =
       %Paragraph{
@@ -106,7 +101,7 @@ defmodule ObdMonitor.Dashboard do
         gauge_style: %Style{fg: :blue}
       }
 
-    error_text = state.last_error || "なし"
+    error_text = error_text(state.last_error)
 
     footer =
       %Paragraph{
@@ -115,7 +110,8 @@ defmodule ObdMonitor.Dashboard do
       }
 
     [
-      {status_panel, %Rect{x: 0, y: 0, width: frame.width, height: min(top_height, frame.height)}},
+      {status_panel,
+       %Rect{x: 0, y: 0, width: frame.width, height: min(top_height, frame.height)}},
       {rpm_gauge,
        %Rect{
          x: 0,
@@ -177,4 +173,22 @@ defmodule ObdMonitor.Dashboard do
   defp clamp(value) when value < 0, do: 0.0
   defp clamp(value) when value > 1, do: 1.0
   defp clamp(value), do: value * 1.0
+
+  defp rpm_text(nil), do: "-- rpm"
+  defp rpm_text(rpm), do: "#{rpm} rpm"
+
+  defp temp_text(nil), do: "-- C"
+  defp temp_text(temp_c), do: "#{temp_c} C"
+
+  defp ignition_text(nil), do: "--"
+  defp ignition_text(ignition_deg), do: :erlang.float_to_binary(ignition_deg, decimals: 1)
+
+  defp intake_text(nil), do: "-- kPa"
+  defp intake_text(intake_kpa), do: "#{intake_kpa} kPa"
+
+  defp battery_text(nil), do: "--"
+  defp battery_text(voltage_v), do: :erlang.float_to_binary(voltage_v, decimals: 2)
+
+  defp error_text(nil), do: "なし"
+  defp error_text(last_error), do: last_error
 end

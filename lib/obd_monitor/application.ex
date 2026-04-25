@@ -19,15 +19,14 @@ defmodule ObdMonitor.Application do
   end
 
   defp env_int(key, default) do
-    case System.get_env(key) do
-      nil ->
-        default
-
-      value ->
-        case Integer.parse(value) do
-          {parsed, ""} when parsed > 0 -> parsed
-          _ -> default
-        end
-    end
+    key
+    |> System.get_env()
+    |> parse_positive_int(default)
   end
+
+  defp parse_positive_int(nil, default), do: default
+  defp parse_positive_int(value, default), do: parse_integer(Integer.parse(value), default)
+
+  defp parse_integer({parsed, ""}, _default) when parsed > 0, do: parsed
+  defp parse_integer(_parsed, default), do: default
 end
