@@ -19,6 +19,7 @@ defmodule ObdMonitor.Dashboard do
      %{
        rpm: nil,
        coolant_temp_c: nil,
+       ignition_timing_deg: nil,
        status: "starting",
        last_error: nil
      }}
@@ -31,16 +32,19 @@ defmodule ObdMonitor.Dashboard do
     rpm_ratio = clamp(rpm / 8_000)
     temp_ratio = clamp(temp / 120)
 
-    top_height = 5
+    top_height = 6
     gauge_height = 4
 
     rpm_text = if state.rpm, do: "#{state.rpm} rpm", else: "-- rpm"
     temp_text = if state.coolant_temp_c, do: "#{state.coolant_temp_c} C", else: "-- C"
 
+    ignition_text =
+      if state.ignition_timing_deg, do: :erlang.float_to_binary(state.ignition_timing_deg, decimals: 1), else: "--"
+
     overview =
       %Paragraph{
         text:
-          "ND Roadster OBD monitor\nRPM: #{rpm_text}\nCoolant: #{temp_text}\nStatus: #{state.status}",
+          "ND Roadster OBD monitor\nRPM: #{rpm_text}\nCoolant: #{temp_text}\nIgnition: #{ignition_text} deg\nStatus: #{state.status}",
         block: %Block{
           title: "Live Values (q: quit)",
           borders: [:all]

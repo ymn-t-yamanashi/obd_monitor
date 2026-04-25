@@ -16,12 +16,14 @@ defmodule ObdMonitor.Telemetry do
             interval_ms: @default_interval_ms,
             rpm: nil,
             coolant_temp_c: nil,
+            ignition_timing_deg: nil,
             status: "initializing...",
             last_error: nil
 
   @type snapshot :: %{
           rpm: non_neg_integer() | nil,
           coolant_temp_c: integer() | nil,
+          ignition_timing_deg: float() | nil,
           status: String.t(),
           last_error: String.t() | nil
         }
@@ -81,11 +83,12 @@ defmodule ObdMonitor.Telemetry do
   def handle_info(:poll, state) do
     {rpm, rpm_err} = read_rpm(state.uart)
     {coolant, coolant_err} = read_coolant_temp(state.uart)
+    {ignition, ignition_err} = read_ignition_timing(state.uart)
 
     {status, last_error} =
-      case {rpm_err, coolant_err} do
-        {nil, nil} -> {"connected", nil}
-        _ -> {"degraded", Enum.find([rpm_err, coolant_err], & &1)}
+      case {rpm_err, coolant_err, ignition_err} do
+        {nil, nil, nil} -> {"connected", nil}
+        _ -> {"degraded", Enum.find([rpm_err, coolant_err, ignition_err], & &1)}
       end
 
     Process.send_after(self(), :poll, state.interval_ms)
@@ -95,6 +98,7 @@ defmodule ObdMonitor.Telemetry do
        state
        | rpm: rpm || state.rpm,
          coolant_temp_c: coolant || state.coolant_temp_c,
+         ignition_timing_deg: ignition || state.ignition_timing_deg,
          status: status,
          last_error: last_error
      }}
@@ -135,6 +139,15 @@ defmodule ObdMonitor.Telemetry do
       {a - 40, nil}
     else
       {:error, reason} -> {nil, "Coolant: #{reason}"}
+    end
+  end
+
+  defp read_ignition_timing(uart) do
+    with {:ok, raw} <- send_cmd(uart, "010E"),
+         {:ok, a} <- extract_pid_bytes(raw, "0E", 1) do
+      {a / 2 - 64, nil}
+    else
+      {:error, reason} -> {nil, "Ignition: #{reason}"}
     end
   end
 
@@ -195,6 +208,7 @@ defmodule ObdMonitor.Telemetry do
     %{
       rpm: state.rpm,
       coolant_temp_c: state.coolant_temp_c,
+      ignition_timing_deg: state.ignition_timing_deg,
       status: state.status,
       last_error: state.last_error
     }
