@@ -46,9 +46,9 @@ defmodule ObdMonitor.Dashboard do
     overview =
       %Paragraph{
         text:
-          "ND Roadster OBD monitor\nRPM: #{rpm_text}\nCoolant: #{temp_text}\nIgnition: #{ignition_text} deg\nStatus: #{state.status}",
+          "ND Roadster OBD monitor\nエンジン回転数: #{rpm_text}\n冷却水温: #{temp_text}\n点火時期進角: #{ignition_text} deg\n状態: #{state.status}",
         block: %Block{
-          title: "Live Values (q: quit)",
+          title: "リアルタイム値 (q: 終了)",
           borders: [:all]
         }
       }
@@ -57,7 +57,7 @@ defmodule ObdMonitor.Dashboard do
       %Gauge{
         ratio: rpm_ratio,
         label: "#{rpm_text} / 8000",
-        block: %Block{title: "Engine RPM", borders: [:all]},
+        block: %Block{title: "エンジン回転数", borders: [:all]},
         gauge_style: %Style{fg: :green}
       }
 
@@ -65,16 +65,16 @@ defmodule ObdMonitor.Dashboard do
       %Gauge{
         ratio: temp_ratio,
         label: "#{temp_text} / 120C",
-        block: %Block{title: "Coolant Temp", borders: [:all]},
+        block: %Block{title: "冷却水温", borders: [:all]},
         gauge_style: %Style{fg: :yellow}
       }
 
-    error_text = state.last_error || "none"
+    error_text = state.last_error || "なし"
 
     footer =
       %Paragraph{
-        text: "Last error: #{error_text}",
-        block: %Block{title: "Diagnostics", borders: [:all]}
+        text: "直近エラー: #{error_text}",
+        block: %Block{title: "診断情報", borders: [:all]}
       }
 
     [
