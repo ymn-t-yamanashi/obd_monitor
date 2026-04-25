@@ -9,7 +9,8 @@ defmodule ObdMonitor.Telemetry do
   alias Circuits.UART
 
   @default_speed 115_200
-  @default_interval_ms 500
+  @default_interval_ms 200
+  @uart_read_timeout_ms 200
 
   defstruct uart: nil,
             device: "/dev/ttyUSB0",
@@ -81,6 +82,8 @@ defmodule ObdMonitor.Telemetry do
   end
 
   def handle_info(:poll, state) do
+    started_at = System.monotonic_time(:millisecond)
+
     {rpm, rpm_err} = read_rpm(state.uart)
     {coolant, coolant_err} = read_coolant_temp(state.uart)
     {ignition, ignition_err} = read_ignition_timing(state.uart)
@@ -91,7 +94,9 @@ defmodule ObdMonitor.Telemetry do
         _ -> {"degraded", Enum.find([rpm_err, coolant_err, ignition_err], & &1)}
       end
 
-    Process.send_after(self(), :poll, state.interval_ms)
+    elapsed_ms = System.monotonic_time(:millisecond) - started_at
+    next_poll_ms = max(state.interval_ms - elapsed_ms, 0)
+    Process.send_after(self(), :poll, next_poll_ms)
 
     {:noreply,
      %{
@@ -157,7 +162,7 @@ defmodule ObdMonitor.Telemetry do
   end
 
   defp collect_response(uart, acc) do
-    case UART.read(uart, 500) do
+    case UART.read(uart, @uart_read_timeout_ms) do
       {:ok, data} ->
         next = acc <> data
 

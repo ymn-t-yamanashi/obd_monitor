@@ -39,11 +39,19 @@ newgrp dialout
 ## Environment variables
 
 - `OBD_DEVICE` (default: `/dev/ttyUSB0`)
+- `OBD_POLL_INTERVAL_MS` (default: `200`)
+- `DASHBOARD_REFRESH_MS` (default: `100`)
 
 例:
 
 ```bash
 OBD_DEVICE=/dev/ttyUSB1 mise exec -- mix run --no-halt
+```
+
+応答をさらに速くしたい場合の例:
+
+```bash
+OBD_POLL_INTERVAL_MS=150 DASHBOARD_REFRESH_MS=80 mise exec -- mix run --no-halt
 ```
 
 ## OBD PIDs

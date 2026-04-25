@@ -9,14 +9,16 @@ defmodule ObdMonitor.Dashboard do
   alias ExRatatui.Style
   alias ExRatatui.Widgets.{Block, Gauge, Paragraph}
 
-  @refresh_ms 250
+  @default_refresh_ms 100
 
   @impl true
-  def mount(_opts) do
-    Process.send_after(self(), :refresh, @refresh_ms)
+  def mount(opts) do
+    refresh_ms = Keyword.get(opts, :refresh_ms, @default_refresh_ms)
+    Process.send_after(self(), :refresh, refresh_ms)
 
     {:ok,
      %{
+       refresh_ms: refresh_ms,
        rpm: nil,
        coolant_temp_c: nil,
        ignition_timing_deg: nil,
@@ -108,7 +110,7 @@ defmodule ObdMonitor.Dashboard do
   @impl true
   def handle_info(:refresh, state) do
     snapshot = ObdMonitor.Telemetry.snapshot()
-    Process.send_after(self(), :refresh, @refresh_ms)
+    Process.send_after(self(), :refresh, state.refresh_ms)
     {:noreply, Map.merge(state, snapshot)}
   end
 
