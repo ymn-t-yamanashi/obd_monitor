@@ -23,6 +23,7 @@ defmodule ObdMonitor.Dashboard do
        coolant_temp_c: nil,
        ignition_timing_deg: nil,
        intake_pressure_kpa: nil,
+       battery_voltage_v: nil,
        status: "starting",
        last_error: nil
      }}
@@ -35,7 +36,7 @@ defmodule ObdMonitor.Dashboard do
     rpm_ratio = clamp(rpm / 8_000)
     temp_ratio = clamp(temp / 120)
 
-    top_height = 7
+    top_height = 8
     gauge_height = 4
 
     rpm_text = if state.rpm, do: "#{state.rpm} rpm", else: "-- rpm"
@@ -46,10 +47,13 @@ defmodule ObdMonitor.Dashboard do
 
     intake_text = if state.intake_pressure_kpa, do: "#{state.intake_pressure_kpa} kPa", else: "-- kPa"
 
+    battery_text =
+      if state.battery_voltage_v, do: :erlang.float_to_binary(state.battery_voltage_v, decimals: 2), else: "--"
+
     overview =
       %Paragraph{
         text:
-          "ND Roadster OBD monitor\nエンジン回転数: #{rpm_text}\n冷却水温: #{temp_text}\n点火時期進角: #{ignition_text} deg\n吸気管絶対圧: #{intake_text}\n状態: #{state.status}",
+          "ND Roadster OBD monitor\nエンジン回転数: #{rpm_text}\n冷却水温: #{temp_text}\n点火時期進角: #{ignition_text} deg\n吸気管絶対圧: #{intake_text}\nバッテリー電圧: #{battery_text} V\n状態: #{state.status}",
         block: %Block{
           title: "リアルタイム値 (q: 終了)",
           borders: [:all]

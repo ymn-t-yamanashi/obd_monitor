@@ -19,6 +19,7 @@ defmodule ObdMonitor.Telemetry do
             coolant_temp_c: nil,
             ignition_timing_deg: nil,
             intake_pressure_kpa: nil,
+            battery_voltage_v: nil,
             status: "initializing...",
             last_error: nil
 
@@ -27,6 +28,7 @@ defmodule ObdMonitor.Telemetry do
           coolant_temp_c: integer() | nil,
           ignition_timing_deg: float() | nil,
           intake_pressure_kpa: non_neg_integer() | nil,
+          battery_voltage_v: float() | nil,
           status: String.t(),
           last_error: String.t() | nil
         }
@@ -90,11 +92,12 @@ defmodule ObdMonitor.Telemetry do
     {coolant, coolant_err} = read_coolant_temp(state.uart)
     {ignition, ignition_err} = read_ignition_timing(state.uart)
     {intake, intake_err} = read_intake_pressure(state.uart)
+    {battery, battery_err} = read_battery_voltage(state.uart)
 
     {status, last_error} =
-      case {rpm_err, coolant_err, ignition_err, intake_err} do
-        {nil, nil, nil, nil} -> {"connected", nil}
-        _ -> {"degraded", Enum.find([rpm_err, coolant_err, ignition_err, intake_err], & &1)}
+      case {rpm_err, coolant_err, ignition_err, intake_err, battery_err} do
+        {nil, nil, nil, nil, nil} -> {"connected", nil}
+        _ -> {"degraded", Enum.find([rpm_err, coolant_err, ignition_err, intake_err, battery_err], & &1)}
       end
 
     elapsed_ms = System.monotonic_time(:millisecond) - started_at
@@ -108,6 +111,7 @@ defmodule ObdMonitor.Telemetry do
          coolant_temp_c: coolant || state.coolant_temp_c,
          ignition_timing_deg: ignition || state.ignition_timing_deg,
          intake_pressure_kpa: intake || state.intake_pressure_kpa,
+         battery_voltage_v: battery || state.battery_voltage_v,
          status: status,
          last_error: last_error
      }}
@@ -166,6 +170,15 @@ defmodule ObdMonitor.Telemetry do
       {a, nil}
     else
       {:error, reason} -> {nil, "Intake pressure: #{reason}"}
+    end
+  end
+
+  defp read_battery_voltage(uart) do
+    with {:ok, raw} <- send_cmd(uart, "0142"),
+         {:ok, a, b} <- extract_pid_bytes(raw, "42", 2) do
+      {(a * 256 + b) / 1000, nil}
+    else
+      {:error, reason} -> {nil, "Battery voltage: #{reason}"}
     end
   end
 
@@ -228,6 +241,7 @@ defmodule ObdMonitor.Telemetry do
       coolant_temp_c: state.coolant_temp_c,
       ignition_timing_deg: state.ignition_timing_deg,
       intake_pressure_kpa: state.intake_pressure_kpa,
+      battery_voltage_v: state.battery_voltage_v,
       status: state.status,
       last_error: state.last_error
     }
