@@ -1,10 +1,10 @@
 defmodule ObdMonitor do
   @moduledoc """
-  Documentation for `ObdMonitor`.
+  OBD Monitor アプリの基本モジュールです。
   """
 
   @doc """
-  Hello world.
+  動作確認用に `:world` を返します。
 
   ## Examples
 
@@ -12,6 +12,7 @@ defmodule ObdMonitor do
       :world
 
   """
+  # 動作確認値を返す関数。
   def hello do
     :world
   end

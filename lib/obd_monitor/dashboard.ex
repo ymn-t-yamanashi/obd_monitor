@@ -1,6 +1,6 @@
 defmodule ObdMonitor.Dashboard do
   @moduledoc """
-  Terminal dashboard powered by ExRatatui.
+  ExRatatuiでリアルタイム値を描画するダッシュボードモジュールです。
   """
   use ExRatatui.App
 
@@ -12,6 +12,7 @@ defmodule ObdMonitor.Dashboard do
   @default_refresh_ms 100
 
   @impl true
+  # 初期状態を作成し、定期更新を開始する。
   def mount(opts) do
     refresh_ms = Keyword.get(opts, :refresh_ms, @default_refresh_ms)
     Process.send_after(self(), :refresh, refresh_ms)
@@ -30,6 +31,7 @@ defmodule ObdMonitor.Dashboard do
   end
 
   @impl true
+  # 現在のセンサー値をゲージとして描画する。
   def render(state, frame) do
     rpm = state.rpm || 0
     temp = state.coolant_temp_c || 0
@@ -158,37 +160,56 @@ defmodule ObdMonitor.Dashboard do
   end
 
   @impl true
+  # qキー入力でアプリを終了する。
   def handle_event(%Event.Key{code: "q"}, state), do: {:stop, state}
+  # その他の入力イベントは無視する。
   def handle_event(_event, state), do: {:noreply, state}
 
   @impl true
+  # Telemetryから最新値を取得して再描画を予約する。
   def handle_info(:refresh, state) do
     snapshot = ObdMonitor.Telemetry.snapshot()
     Process.send_after(self(), :refresh, state.refresh_ms)
     {:noreply, Map.merge(state, snapshot)}
   end
 
+  # 未処理メッセージは無視する。
   def handle_info(_msg, state), do: {:noreply, state}
 
+  # 比率の下限を0.0に丸める。
   defp clamp(value) when value < 0, do: 0.0
+  # 比率の上限を1.0に丸める。
   defp clamp(value) when value > 1, do: 1.0
+  # 比率を浮動小数へ変換する。
   defp clamp(value), do: value * 1.0
 
+  # 回転数未取得時の表示文字列を返す。
   defp rpm_text(nil), do: "-- rpm"
+  # 回転数取得時の表示文字列を返す。
   defp rpm_text(rpm), do: "#{rpm} rpm"
 
+  # 水温未取得時の表示文字列を返す。
   defp temp_text(nil), do: "-- C"
+  # 水温取得時の表示文字列を返す。
   defp temp_text(temp_c), do: "#{temp_c} C"
 
+  # 進角未取得時の表示文字列を返す。
   defp ignition_text(nil), do: "--"
+  # 進角取得時の表示文字列を返す。
   defp ignition_text(ignition_deg), do: :erlang.float_to_binary(ignition_deg, decimals: 1)
 
+  # 吸気圧未取得時の表示文字列を返す。
   defp intake_text(nil), do: "-- kPa"
+  # 吸気圧取得時の表示文字列を返す。
   defp intake_text(intake_kpa), do: "#{intake_kpa} kPa"
 
+  # 電圧未取得時の表示文字列を返す。
   defp battery_text(nil), do: "--"
+  # 電圧取得時の表示文字列を返す。
   defp battery_text(voltage_v), do: :erlang.float_to_binary(voltage_v, decimals: 2)
 
+  # エラー未発生時の表示文字列を返す。
   defp error_text(nil), do: "なし"
+  # 直近エラー発生時の表示文字列を返す。
   defp error_text(last_error), do: last_error
 end
