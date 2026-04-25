@@ -18,6 +18,7 @@ defmodule ObdMonitor.Telemetry do
             rpm: nil,
             coolant_temp_c: nil,
             ignition_timing_deg: nil,
+            intake_pressure_kpa: nil,
             status: "initializing...",
             last_error: nil
 
@@ -25,6 +26,7 @@ defmodule ObdMonitor.Telemetry do
           rpm: non_neg_integer() | nil,
           coolant_temp_c: integer() | nil,
           ignition_timing_deg: float() | nil,
+          intake_pressure_kpa: non_neg_integer() | nil,
           status: String.t(),
           last_error: String.t() | nil
         }
@@ -87,11 +89,12 @@ defmodule ObdMonitor.Telemetry do
     {rpm, rpm_err} = read_rpm(state.uart)
     {coolant, coolant_err} = read_coolant_temp(state.uart)
     {ignition, ignition_err} = read_ignition_timing(state.uart)
+    {intake, intake_err} = read_intake_pressure(state.uart)
 
     {status, last_error} =
-      case {rpm_err, coolant_err, ignition_err} do
-        {nil, nil, nil} -> {"connected", nil}
-        _ -> {"degraded", Enum.find([rpm_err, coolant_err, ignition_err], & &1)}
+      case {rpm_err, coolant_err, ignition_err, intake_err} do
+        {nil, nil, nil, nil} -> {"connected", nil}
+        _ -> {"degraded", Enum.find([rpm_err, coolant_err, ignition_err, intake_err], & &1)}
       end
 
     elapsed_ms = System.monotonic_time(:millisecond) - started_at
@@ -104,6 +107,7 @@ defmodule ObdMonitor.Telemetry do
        | rpm: rpm || state.rpm,
          coolant_temp_c: coolant || state.coolant_temp_c,
          ignition_timing_deg: ignition || state.ignition_timing_deg,
+         intake_pressure_kpa: intake || state.intake_pressure_kpa,
          status: status,
          last_error: last_error
      }}
@@ -153,6 +157,15 @@ defmodule ObdMonitor.Telemetry do
       {a / 2 - 64, nil}
     else
       {:error, reason} -> {nil, "Ignition: #{reason}"}
+    end
+  end
+
+  defp read_intake_pressure(uart) do
+    with {:ok, raw} <- send_cmd(uart, "010B"),
+         {:ok, a} <- extract_pid_bytes(raw, "0B", 1) do
+      {a, nil}
+    else
+      {:error, reason} -> {nil, "Intake pressure: #{reason}"}
     end
   end
 
@@ -214,6 +227,7 @@ defmodule ObdMonitor.Telemetry do
       rpm: state.rpm,
       coolant_temp_c: state.coolant_temp_c,
       ignition_timing_deg: state.ignition_timing_deg,
+      intake_pressure_kpa: state.intake_pressure_kpa,
       status: state.status,
       last_error: state.last_error
     }

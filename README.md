@@ -1,7 +1,7 @@
 # OBD Monitor (ND Roadster)
 
 `OBDLINK EX USB` から OBD-II PID を読み、`ex_ratatui` で
-エンジン回転数・水温・点火時期進角をリアルタイム表示するコンソールアプリです。
+エンジン回転数・水温・点火時期進角・吸気管絶対圧をリアルタイム表示するコンソールアプリです。
 
 ## Requirements
 
@@ -59,3 +59,4 @@ OBD_POLL_INTERVAL_MS=150 DASHBOARD_REFRESH_MS=80 mise exec -- mix run --no-halt
 - `010C`: Engine RPM
 - `0105`: Coolant temperature
 - `010E`: Ignition timing advance
+- `010B`: Intake manifold absolute pressure
